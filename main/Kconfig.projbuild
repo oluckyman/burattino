@@ -1,0 +1,15 @@
+menu "WiFi Configuration"
+
+config WIFI_SSID
+    string "WiFi SSID"
+    default "DRAGONET8728"
+    help
+        SSID (network name) for the example to connect to.
+
+config WIFI_PASSWORD
+    string "WiFi Password"
+    default "77fy4xy7cwme"
+    help
+        WiFi password (WPA or WPA2) for the example to use.
+
+endmenu

@@ -1,0 +1,13 @@
+.config
+*.o
+*.pyc
+build/
+
+# gtags
+GTAGS
+GRTAGS
+GPATH
+
+# MacOS directory files
+.DS_Store
+
