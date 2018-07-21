@@ -1,13 +1,13 @@
 #include <string.h>
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "freertos/event_groups.h"
-#include "esp_wifi.h"
-#include "esp_log.h"
-#include "wifi_connect.h"
-#include "esp_smartconfig.h"
-#include "tcpip_adapter.h"
+#include "freertos/task.h"
 #include "esp_event_loop.h"
+#include "esp_log.h"
+#include "esp_smartconfig.h"
+#include "esp_wifi.h"
+#include "tcpip_adapter.h"
+#include "wifi_connect.h"
 
 
 static EventGroupHandle_t event_group;
