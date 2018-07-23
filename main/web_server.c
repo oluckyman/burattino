@@ -19,34 +19,41 @@ static void http_server_netconn_serve(struct netconn *conn) {
        We assume the request (the part we care about) is in one netbuf */
     err = netconn_recv(conn, &inbuf);
 
-    char http_html_hdr[] = "HTTP/1.1 200 OK\r\nContent-type: application/json\r\n\r\n";
+    char http_200_header[] = "HTTP/1.1 200 OK\r\nContent-type: application/json\r\n\r\n";
+    char http_404_header[] = "HTTP/1.1 404 Not Found\r\nContent-type: application/json\r\n\r\n";
+    char http_400_header[] = "HTTP/1.1 400 Bad Request\r\nContent-type: application/json\r\n\r\n";
 
+    ESP_LOGI(TAG, "Got connection");
     if (err == ERR_OK) {
         netbuf_data(inbuf, (void**)&buf, &buflen);
 
-        /* Is this an HTTP GET command? (only check the first 5 chars, since
-           there are other formats for GET, and we're keeping it very simple )*/
-        printf("buffer = %s \n", buf);
-        if (buflen>=5 &&
-                buf[0]=='G' &&
-                buf[1]=='E' &&
-                buf[2]=='T' &&
-                buf[3]==' ' &&
-                buf[4]=='/' ) {
-            printf("buf[5] = %c\n", buf[5]);
-            /* Send the HTML header
-             * subtract 1 from the size, since we dont send the \0 in the string
-             * NETCONN_NOCOPY: our data is const static, so no need to copy it
-             */
+        printf("> > >\n%.*s\n< < <\n", buflen, buf);
 
-            netconn_write(conn, http_html_hdr, sizeof(http_html_hdr)-1, NETCONN_NOCOPY);
+        char *endpoint = "GET /register";
+        if (strncmp(endpoint, buf, strlen(endpoint)) == 0) {
+            // TODO: send request to backend here
 
-            char http_index_html[] = "{\"status\": \"OK\"}";
-            netconn_write(conn, http_index_html, sizeof(http_index_html)-1, NETCONN_NOCOPY);
+            int plantId;
+            if (sscanf(buf + strlen(endpoint), "?plant_id=%d", &plantId) == 1) {
+                printf(" PlantId: %d\n\n", plantId);
+                netconn_write(conn, http_200_header, sizeof(http_200_header)-1, NETCONN_NOCOPY);
+                char http_index_html[] = "{\"status\": \"OK\"}";
+                netconn_write(conn, http_index_html, sizeof(http_index_html)-1, NETCONN_NOCOPY);
+                ESP_LOGI(TAG, "OK");
+            } else {
+                netconn_write(conn, http_400_header, sizeof(http_400_header)-1, NETCONN_NOCOPY);
+                char http_index_html[] = "{\"status\": \"Error\",\"message\":\"`plant_id` is required\"}";
+                netconn_write(conn, http_index_html, sizeof(http_index_html)-1, NETCONN_NOCOPY);
+            }
+
+        } else {
+            netconn_write(conn, http_404_header, sizeof(http_404_header)-1, NETCONN_NOCOPY);
+            ESP_LOGI(TAG, "Not found");
         }
     }
     /* Close the connection (server closes in HTTP) */
     netconn_close(conn);
+    ESP_LOGI(TAG, "Close connection");
 
     /* Delete the buffer (netconn_recv gives us ownership,
        so we have to make sure to deallocate the buffer) */
@@ -59,10 +66,9 @@ static void http_server_task(void *pvParameters) {
     conn = netconn_new(NETCONN_TCP);
     netconn_bind(conn, NULL, 80);
     netconn_listen(conn);
-    ESP_LOGI(TAG, "start webserver");
+    ESP_LOGI(TAG, "Start webserver");
     do {
         err = netconn_accept(conn, &newconn);
-        ESP_LOGI(TAG, "got connection");
         if (err == ERR_OK) {
             http_server_netconn_serve(newconn);
             netconn_delete(newconn);

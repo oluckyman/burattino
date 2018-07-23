@@ -9,6 +9,7 @@
 #include "tcpip_adapter.h"
 #include "wifi_connect.h"
 
+static const bool TEST_MODE = true;
 
 static EventGroupHandle_t event_group;
 static const int CONNECTED_BIT = BIT0;
@@ -18,12 +19,24 @@ void smartconfig_task(void * parm);
 static esp_err_t event_handler(void *ctx, system_event_t *event) {
     switch(event->event_id) {
         case SYSTEM_EVENT_STA_START:
-            xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
+            ESP_LOGI(TAG, "SYSTEM_EVENT_STA_START");
+            if (TEST_MODE) {
+                esp_wifi_connect();
+            } else {
+                xTaskCreate(smartconfig_task, "smartconfig_task", 4096, NULL, 3, NULL);
+            }
             break;
         case SYSTEM_EVENT_STA_GOT_IP:
-            xEventGroupSetBits(event_group, CONNECTED_BIT);
+            ESP_LOGI(TAG, "SYSTEM_EVENT_STA_GOT_IP");
+            if (TEST_MODE) {
+                xEventGroupSetBits(event_group, CONNECTED_BIT);
+                xEventGroupSetBits(event_group, WIFI_SETUP_DONE_BIT);
+            } else {
+                xEventGroupSetBits(event_group, CONNECTED_BIT);
+            }
             break;
         case SYSTEM_EVENT_STA_DISCONNECTED:
+            ESP_LOGI(TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
             esp_wifi_connect();
             xEventGroupClearBits(event_group, CONNECTED_BIT);
             break;
@@ -97,5 +110,17 @@ void initialize_wifi(EventGroupHandle_t _event_group) {
 
     ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
+
+    // no smartconfig
+    wifi_config_t sta_config = {
+        .sta = {
+            .ssid = CONFIG_WIFI_SSID,
+            .password = CONFIG_WIFI_PASSWORD,
+            .bssid_set = false
+        }
+    };
+    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &sta_config) );
+    //
+
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
