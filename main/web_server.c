@@ -5,8 +5,9 @@
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 #include "lwip/api.h"
+#include "./http_request.h"
 
-static const char *TAG = "bur[http]";
+static const char *TAG = "bur[http-server]";
 
 
 void send_header(struct netconn *conn, int http_code) {
@@ -86,7 +87,7 @@ void handle_request(struct netconn *conn, char *request) {
         return;
     }
 
-    // TODO: send request to backend here
+    http_request();
 
     // Temporary success response
     //
