@@ -9,6 +9,8 @@
 
 static const char *TAG = "bur[http-server]";
 
+static EventGroupHandle_t event_group;
+
 
 void send_header(struct netconn *conn, int http_code) {
     char *header;
@@ -87,7 +89,7 @@ void handle_request(struct netconn *conn, char *request) {
         return;
     }
 
-    http_request();
+    /* http_request(); */
 
     // Temporary success response
     //
@@ -148,6 +150,10 @@ static void http_server_task(void *pvParameters) {
 }
 
 
-void initialize_web_server() {
-    xTaskCreate(&http_server_task, "http_server_task", 2048, NULL, 5, NULL);
+void initialize_web_server(EventGroupHandle_t _event_group) {
+    /* xTaskCreate(&http_server_task, "http_server_task", 2048, NULL, 5, NULL); */
+    event_group = _event_group;
+    ESP_LOGI(TAG, ">>>> Start Request");
+    http_request(event_group);
+    ESP_LOGI(TAG, "<<<< Finish Request");
 }

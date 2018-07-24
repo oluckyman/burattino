@@ -1,23 +1,35 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
 #include "esp_log.h"
-
 #include "lwip/err.h"
 #include "lwip/sockets.h"
 #include "lwip/sys.h"
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
+#include "./http_request.h"
 
-#define WEB_SERVER "example.com"
+#define WEB_SERVER "buratino.asobolev.ru"
 #define WEB_PORT 80
-#define WEB_URL "http://example.com/"
+#define WEB_URL "/api/v1/plants/52/"
+
+
+static EventGroupHandle_t event_group;
 
 static const char *TAG = "bur[http-request]";
 
-static const char *REQUEST = "GET " WEB_URL " HTTP/1.0\r\n"
+#define TOKEN "Token eyJhbGciOiJSUzI1NiIsImtpZCI6ImI4OWY3MzQ2YTA5ODVmNDIxZGNkOGQzMGMwYjMwZWViZmFlMTlhMWUifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vYnVyYXR0aW5vLTFkYzI0IiwibmFtZSI6IklseWEgIiwiYXVkIjoiYnVyYXR0aW5vLTFkYzI0IiwiYXV0aF90aW1lIjoxNTI5MDY5MzEzLCJ1c2VyX2lkIjoiYzAwbWMwbGxiWFBCekI0NjJmVFBGM1d2SzcxMiIsInN1YiI6ImMwMG1jMGxsYlhQQnpCNDYyZlRQRjNXdks3MTIiLCJpYXQiOjE1MzI0NjM3MTYsImV4cCI6MTUzMjQ2NzMxNiwiZW1haWwiOiJidXJhdHRpbm9AYmVsc2t5LmluIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImJ1cmF0dGlub0BiZWxza3kuaW4iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.Tb1OTv777v-mHMYVIl8TKFbDVdyDnNFMa5KQ7gNDUT4QYX0XrfvEH_4Y0nmRPuAUuRsfjj1q5956eUu5dZ8EyBYdnHr9GBQjUSvV0HcIZW6U_LBCt35PdPzIazkVDbHQ6egT7xu3YHcoCUvOtdvOQHvzagMKbJ4cLc881jHTBe6FiVbfR3uiJVLk5w6jZZLr-IC5b0yd40GMhcnLVQE1EOW1vQeEgzLlYpvVN_NRgoo6tgCx0--URqfp1DtwxBsSOxIkEbX1W6tGCK6BuAIi0r4PBm2fHaAUgGreTJMdDaIxjiXYMgiF65O7CISFF54-bRQKkYAntbkU0DR6OOyRXw"
+#define DEVICE_ID "28f57ad5-a6ec-482f-a396-92b5cabbf211"
+
+
+static const char *REQUEST = "PUT " WEB_URL " HTTP/1.0\r\n"
     "Host: "WEB_SERVER"\r\n"
     "User-Agent: esp-idf/1.0 esp32\r\n"
-    "\r\n";
+    "Content-Type: application/json\r\n"
+    "Content-Length: 34\r\n"
+    "Authorization: "TOKEN"\r\n"
+    "\r\n"
+    "{\"name\":\"esp-32\", \"plant_type\": 7}";
 
 
 void http_request_task(void *pvParameters) {
@@ -64,6 +76,10 @@ void http_request_task(void *pvParameters) {
         ESP_LOGI(TAG, "... connected");
         freeaddrinfo(res);
 
+        ESP_LOGI(TAG, "... sending request:");
+        printf(REQUEST);
+        printf("\r\n\r\n");
+
         if (write(s, REQUEST, strlen(REQUEST)) < 0) {
             ESP_LOGE(TAG, "... socket send failed");
             close(s);
@@ -92,17 +108,20 @@ void http_request_task(void *pvParameters) {
             }
         } while(r > 0);
 
+        printf("\r\n\r\n");
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
         close(s);
-        for(int countdown = 10; countdown >= 0; countdown--) {
-            ESP_LOGI(TAG, "%d... ", countdown);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-        ESP_LOGI(TAG, "Starting again!");
+        break;
     }
+    xEventGroupSetBits(event_group, HTTP_REQUEST_DONE_BIT);
+    vTaskDelete(NULL);
 }
 
 
-void http_request() {
+void http_request(EventGroupHandle_t _event_group) {
+    event_group = _event_group;
+
+    xEventGroupClearBits(event_group, HTTP_REQUEST_DONE_BIT);
     xTaskCreate(&http_request_task, "http_request_task", 4096, NULL, 5, NULL);
+    xEventGroupWaitBits(event_group, HTTP_REQUEST_DONE_BIT, true, false, portMAX_DELAY);
 }

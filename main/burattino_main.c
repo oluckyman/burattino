@@ -20,5 +20,5 @@ void app_main()
 
     initialize_wifi(event_group);
     xEventGroupWaitBits(event_group, WIFI_SETUP_DONE_BIT, true, false, portMAX_DELAY);
-    initialize_web_server();
+    initialize_web_server(event_group);
 }
