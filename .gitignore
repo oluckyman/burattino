@@ -11,3 +11,4 @@ GPATH
 # MacOS directory files
 .DS_Store
 
+sdkconfig.old
