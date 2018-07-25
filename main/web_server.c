@@ -13,7 +13,7 @@ static EventGroupHandle_t event_group;
 
 
 void send_header(struct netconn *conn, int http_code) {
-    char *header;
+    const char *header;
     switch (http_code) {
         case 200:
             header = "HTTP/1.1 200 OK\r\nContent-type: application/json\r\n\r\n";
@@ -32,8 +32,8 @@ void send_header(struct netconn *conn, int http_code) {
 }
 
 
-void send_body(struct netconn *conn, int http_code, char *message) {
-    char *status = "";
+void send_body(struct netconn *conn, int http_code, const char *message) {
+    const char *status = "";
     switch (http_code) {
         case 200:
             status = "OK";
@@ -65,7 +65,7 @@ void send_body(struct netconn *conn, int http_code, char *message) {
 }
 
 
-void response(struct netconn *conn, int http_code, char *message) {
+void response(struct netconn *conn, int http_code, const char *message) {
     ESP_LOGI(TAG, "<<<<<<<<<< Response:");
 
     send_header(conn, http_code);
@@ -74,8 +74,8 @@ void response(struct netconn *conn, int http_code, char *message) {
 }
 
 
-void handle_request(struct netconn *conn, char *request) {
-    char *endpoint = "GET /register";
+void handle_request(struct netconn *conn, const char *request) {
+    const char *endpoint = "GET /register";
     if (strncmp(endpoint, request, strlen(endpoint)) != 0) {
         response(conn, 404, "");
         return;
@@ -84,7 +84,7 @@ void handle_request(struct netconn *conn, char *request) {
     int plant_id;
     int parseResult = sscanf(request + strlen(endpoint), "?plant_id=%d", &plant_id);
     if (parseResult != 1) {
-        char message[] = "Parameter `plant_id` is required";
+        const char message[] = "Parameter `plant_id` is required";
         response(conn, 400, message);
         return;
     }
@@ -93,7 +93,7 @@ void handle_request(struct netconn *conn, char *request) {
 
     // Temporary success response
     //
-    char *format = "Got plant ID: %d";
+    const char *format = "Got plant ID: %d";
     size_t length = snprintf(NULL, 0, format, plant_id);
     char message[length];
     snprintf(message, length + 1, format, plant_id);
@@ -150,10 +150,22 @@ static void http_server_task(void *pvParameters) {
 }
 
 
+#define WEB_SERVER "buratino.asobolev.ru"
+#define WEB_URL "/api/v1/plants/52/"
+#define TOKEN "Token eyJhbGciOiJSUzI1NiIsImtpZCI6ImI4OWY3MzQ2YTA5ODVmNDIxZGNkOGQzMGMwYjMwZWViZmFlMTlhMWUifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vYnVyYXR0aW5vLTFkYzI0IiwibmFtZSI6IklseWEgIiwiYXVkIjoiYnVyYXR0aW5vLTFkYzI0IiwiYXV0aF90aW1lIjoxNTI5MDY5MzEzLCJ1c2VyX2lkIjoiYzAwbWMwbGxiWFBCekI0NjJmVFBGM1d2SzcxMiIsInN1YiI6ImMwMG1jMGxsYlhQQnpCNDYyZlRQRjNXdks3MTIiLCJpYXQiOjE1MzI0NjM3MTYsImV4cCI6MTUzMjQ2NzMxNiwiZW1haWwiOiJidXJhdHRpbm9AYmVsc2t5LmluIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImJ1cmF0dGlub0BiZWxza3kuaW4iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.Tb1OTv777v-mHMYVIl8TKFbDVdyDnNFMa5KQ7gNDUT4QYX0XrfvEH_4Y0nmRPuAUuRsfjj1q5956eUu5dZ8EyBYdnHr9GBQjUSvV0HcIZW6U_LBCt35PdPzIazkVDbHQ6egT7xu3YHcoCUvOtdvOQHvzagMKbJ4cLc881jHTBe6FiVbfR3uiJVLk5w6jZZLr-IC5b0yd40GMhcnLVQE1EOW1vQeEgzLlYpvVN_NRgoo6tgCx0--URqfp1DtwxBsSOxIkEbX1W6tGCK6BuAIi0r4PBm2fHaAUgGreTJMdDaIxjiXYMgiF65O7CISFF54-bRQKkYAntbkU0DR6OOyRXw"
+#define DEVICE_ID "28f57ad5-a6ec-482f-a396-92b5cabbf211"
+
+
 void initialize_web_server(EventGroupHandle_t _event_group) {
     /* xTaskCreate(&http_server_task, "http_server_task", 2048, NULL, 5, NULL); */
     event_group = _event_group;
     ESP_LOGI(TAG, ">>>> Start Request");
-    http_request(event_group);
+    RequestParams params = {
+        .host = WEB_SERVER,
+        .url = WEB_URL,
+        .token = TOKEN,
+        .body = "{\"name\":\"esp-32\", \"plant_type\": 7}",
+    };
+    http_request(event_group, &params);
     ESP_LOGI(TAG, "<<<< Finish Request");
 }
