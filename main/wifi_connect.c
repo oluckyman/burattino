@@ -111,16 +111,16 @@ void initialize_wifi(EventGroupHandle_t _event_group) {
     ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
     ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_STA) );
 
-    // no smartconfig
-    wifi_config_t sta_config = {
-        .sta = {
-            .ssid = CONFIG_WIFI_SSID,
-            .password = CONFIG_WIFI_PASSWORD,
-            .bssid_set = false
-        }
-    };
-    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &sta_config) );
-    //
+    if (TEST_MODE) {
+        wifi_config_t sta_config = {
+            .sta = {
+                .ssid = CONFIG_WIFI_SSID,
+                .password = CONFIG_WIFI_PASSWORD,
+                .bssid_set = false
+            }
+        };
+        ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &sta_config) );
+    }
 
     ESP_ERROR_CHECK( esp_wifi_start() );
 }

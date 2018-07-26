@@ -31,7 +31,7 @@ void http_request_task(void *pvParameters) {
         "User-Agent: esp-idf/1.0 esp32\r\n"
         "Content-Type: application/json\r\n"
         "Content-Length: %d\r\n" // length
-        "Authorization: %s\r\n" // token
+        "Authorization: Token %s\r\n" // token
         "\r\n"
         "%s"; // body
 
@@ -121,7 +121,7 @@ void http_request_task(void *pvParameters) {
         } while(r > 0);
 
         printf("\r\n\r\n");
-        ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
+        ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d", r, errno);
         close(s);
         break;
     }
@@ -129,7 +129,6 @@ void http_request_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-// TODO, use struct_options for the params of the http_request
 void http_request(EventGroupHandle_t _event_group, RequestParams *params) {
     event_group = _event_group;
 
@@ -137,8 +136,3 @@ void http_request(EventGroupHandle_t _event_group, RequestParams *params) {
     xTaskCreate(&http_request_task, "http_request_task", 4096, params, 5, NULL);
     xEventGroupWaitBits(event_group, HTTP_REQUEST_DONE_BIT, true, false, portMAX_DELAY);
 }
-
-/* for reference: */
-/* send_param = malloc(sizeof(example_espnow_send_param_t)); */
-/* memset(send_param, 0, sizeof(example_espnow_send_param_t)); */
-

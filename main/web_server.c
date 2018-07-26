@@ -47,6 +47,7 @@ void send_body(struct netconn *conn, int http_code, const char *message) {
     if (strlen(status)) {
         size_t body_max_size = strlen(status) + strlen(message) + 200;
         char *body = malloc(body_max_size + 1);
+        memset(body, 0, sizeof(*body));
 
         int cursor = sprintf(body, "{");
 
@@ -87,6 +88,28 @@ int parseRequest(const char *input, int *plant_id, char *token_buf, size_t token
 }
 
 
+#define WEB_SERVER "buratino.asobolev.ru"
+#define WEB_URL "/api/v1/plants/52/"
+#define TOKEN "Token eyJhbGciOiJSUzI1NiIsImtpZCI6ImI4OWY3MzQ2YTA5ODVmNDIxZGNkOGQzMGMwYjMwZWViZmFlMTlhMWUifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vYnVyYXR0aW5vLTFkYzI0IiwibmFtZSI6IklseWEgIiwiYXVkIjoiYnVyYXR0aW5vLTFkYzI0IiwiYXV0aF90aW1lIjoxNTI5MDY5MzEzLCJ1c2VyX2lkIjoiYzAwbWMwbGxiWFBCekI0NjJmVFBGM1d2SzcxMiIsInN1YiI6ImMwMG1jMGxsYlhQQnpCNDYyZlRQRjNXdks3MTIiLCJpYXQiOjE1MzI0NjM3MTYsImV4cCI6MTUzMjQ2NzMxNiwiZW1haWwiOiJidXJhdHRpbm9AYmVsc2t5LmluIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImJ1cmF0dGlub0BiZWxza3kuaW4iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.Tb1OTv777v-mHMYVIl8TKFbDVdyDnNFMa5KQ7gNDUT4QYX0XrfvEH_4Y0nmRPuAUuRsfjj1q5956eUu5dZ8EyBYdnHr9GBQjUSvV0HcIZW6U_LBCt35PdPzIazkVDbHQ6egT7xu3YHcoCUvOtdvOQHvzagMKbJ4cLc881jHTBe6FiVbfR3uiJVLk5w6jZZLr-IC5b0yd40GMhcnLVQE1EOW1vQeEgzLlYpvVN_NRgoo6tgCx0--URqfp1DtwxBsSOxIkEbX1W6tGCK6BuAIi0r4PBm2fHaAUgGreTJMdDaIxjiXYMgiF65O7CISFF54-bRQKkYAntbkU0DR6OOyRXw"
+#define DEVICE_ID "28f57ad5-a6ec-482f-a396-92b5cabbf211"
+
+
+void buildRequestParams(RequestParams *params, int plant_id, const char *token) {
+    /* params = (RequestParams) { */
+    /*     .host = WEB_SERVER, */
+    /*     .url = WEB_URL, */
+    /*     .token = token, */
+    /*     .body = "{\"name\":\"esp-32\", \"plant_type\": 7}", */
+    /* }; */
+
+    strcpy(params->host, WEB_SERVER);
+    strcpy(params->url, WEB_URL);
+    strcpy(params->token, token);
+    char body[] = "{\"name\":\"esp-32\", \"plant_type\": 7}";
+    strcpy(params->body, body);
+}
+
+
 void handle_request(struct netconn *conn, const char *request) {
     const char *endpoint = "GET /register";
     if (strncmp(endpoint, request, strlen(endpoint)) != 0) {
@@ -97,24 +120,33 @@ void handle_request(struct netconn *conn, const char *request) {
     int plant_id;
     const size_t token_size = 1000;
     char *token = malloc(token_size + 1);
-    int parseResult = parseRequest(request + strlen(endpoint), &plant_id, token, token_size);
-    ESP_LOGI(TAG, "scanned: %d, plant_id: %d, token: %s", parseResult, plant_id, token);
-    if (parseResult != 2) {
+    memset(token, 0, sizeof(*token));
+    int parsed = parseRequest(request + strlen(endpoint), &plant_id, token, token_size);
+
+    ESP_LOGI(TAG, "parsed: %d, plant_id: %d, token: %s", parsed, plant_id, token);
+    if (parsed != 2) {
         const char message[] = "Parameters `plant_id` and `token` are required";
         response(conn, 400, message);
+        free(token);
         return;
     }
 
-    /* http_request(); */
+    ESP_LOGI(TAG, ">>>> Send Request to Backend");
+    RequestParams *params = malloc(sizeof(RequestParams));
+    memset(params, 0, sizeof(*params));
+    buildRequestParams(params, plant_id, token);
+    http_request(event_group, params);
+    ESP_LOGI(TAG, "<<<< Finish Request to Backend");
 
     // Temporary success response
     //
     const char *format = "Got plant ID: %d and token: %.10s...";
-    size_t length = snprintf(NULL, 0, format, plant_id, token);
-    char message[length + 1];
-    snprintf(message, length, format, plant_id, token);
+    size_t message_size = snprintf(NULL, 0, format, plant_id, token);
+    char message[message_size + 1];
+    snprintf(message, message_size, format, plant_id, token);
 
     response(conn, 200, message);
+    free(token);
 
     ESP_LOGI(TAG, "OK");
 }
@@ -130,11 +162,10 @@ static void http_server_netconn_serve(struct netconn *conn) {
        We assume the request (the part we care about) is in one netbuf */
     err = netconn_recv(conn, &inbuf);
 
-    ESP_LOGI(TAG, ">>>>>>>>>> Request:");
+    ESP_LOGI(TAG, ">>>>>>>>>> Incoming request:");
     if (err == ERR_OK) {
         netbuf_data(inbuf, (void**)&buf, &buflen);
-        printf("%.*s\n----------\n", buflen, buf);
-
+        printf("%.*s\n", buflen, buf);
         handle_request(conn, buf);
     }
 
@@ -166,22 +197,7 @@ static void http_server_task(void *pvParameters) {
 }
 
 
-#define WEB_SERVER "buratino.asobolev.ru"
-#define WEB_URL "/api/v1/plants/52/"
-#define TOKEN "Token eyJhbGciOiJSUzI1NiIsImtpZCI6ImI4OWY3MzQ2YTA5ODVmNDIxZGNkOGQzMGMwYjMwZWViZmFlMTlhMWUifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vYnVyYXR0aW5vLTFkYzI0IiwibmFtZSI6IklseWEgIiwiYXVkIjoiYnVyYXR0aW5vLTFkYzI0IiwiYXV0aF90aW1lIjoxNTI5MDY5MzEzLCJ1c2VyX2lkIjoiYzAwbWMwbGxiWFBCekI0NjJmVFBGM1d2SzcxMiIsInN1YiI6ImMwMG1jMGxsYlhQQnpCNDYyZlRQRjNXdks3MTIiLCJpYXQiOjE1MzI0NjM3MTYsImV4cCI6MTUzMjQ2NzMxNiwiZW1haWwiOiJidXJhdHRpbm9AYmVsc2t5LmluIiwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJmaXJlYmFzZSI6eyJpZGVudGl0aWVzIjp7ImVtYWlsIjpbImJ1cmF0dGlub0BiZWxza3kuaW4iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ.Tb1OTv777v-mHMYVIl8TKFbDVdyDnNFMa5KQ7gNDUT4QYX0XrfvEH_4Y0nmRPuAUuRsfjj1q5956eUu5dZ8EyBYdnHr9GBQjUSvV0HcIZW6U_LBCt35PdPzIazkVDbHQ6egT7xu3YHcoCUvOtdvOQHvzagMKbJ4cLc881jHTBe6FiVbfR3uiJVLk5w6jZZLr-IC5b0yd40GMhcnLVQE1EOW1vQeEgzLlYpvVN_NRgoo6tgCx0--URqfp1DtwxBsSOxIkEbX1W6tGCK6BuAIi0r4PBm2fHaAUgGreTJMdDaIxjiXYMgiF65O7CISFF54-bRQKkYAntbkU0DR6OOyRXw"
-#define DEVICE_ID "28f57ad5-a6ec-482f-a396-92b5cabbf211"
-
-
 void initialize_web_server(EventGroupHandle_t _event_group) {
     event_group = _event_group;
     xTaskCreate(&http_server_task, "http_server_task", 1024 * 4, NULL, 5, NULL);
-    /* ESP_LOGI(TAG, ">>>> Start Request"); */
-    /* RequestParams params = { */
-    /*     .host = WEB_SERVER, */
-    /*     .url = WEB_URL, */
-    /*     .token = TOKEN, */
-    /*     .body = "{\"name\":\"esp-32\", \"plant_type\": 7}", */
-    /* }; */
-    /* http_request(event_group, &params); */
-    /* ESP_LOGI(TAG, "<<<< Finish Request"); */
 }
