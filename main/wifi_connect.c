@@ -9,7 +9,7 @@
 #include "tcpip_adapter.h"
 #include "wifi_connect.h"
 
-static const bool TEST_MODE = true;
+static const bool TEST_MODE = false;
 
 static EventGroupHandle_t event_group;
 static const int CONNECTED_BIT = BIT0;

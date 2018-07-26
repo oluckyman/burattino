@@ -46,7 +46,7 @@ void send_body(struct netconn *conn, int http_code, const char *message) {
 
     if (strlen(status)) {
         size_t body_max_size = strlen(status) + strlen(message) + 200;
-        char body[body_max_size];
+        char *body = malloc(body_max_size + 1);
 
         int cursor = sprintf(body, "{");
 
@@ -61,6 +61,7 @@ void send_body(struct netconn *conn, int http_code, const char *message) {
 
         printf("%s\n", body);
         netconn_write(conn, body, strlen(body), NETCONN_COPY);
+        free(body);
     }
 }
 
@@ -68,9 +69,21 @@ void send_body(struct netconn *conn, int http_code, const char *message) {
 void response(struct netconn *conn, int http_code, const char *message) {
     ESP_LOGI(TAG, "<<<<<<<<<< Response:");
 
+    ESP_LOGI(TAG, "... sending header");
     send_header(conn, http_code);
+    ESP_LOGI(TAG, "... header sent");
+    ESP_LOGI(TAG, "... sending body");
     send_body(conn, http_code, message);
+    ESP_LOGI(TAG, "... body sent");
     printf("==========\n");
+}
+
+
+int parseRequest(const char *input, int *plant_id, char *token_buf, size_t token_buf_size) {
+    if (token_buf_size == 0) return 0;
+    char format[21 + 5 + 1];
+    snprintf(format, sizeof(format), "?plant_id=%%d&token=%%%ds", token_buf_size);
+    return sscanf(input, format, plant_id, token_buf);
 }
 
 
@@ -82,9 +95,12 @@ void handle_request(struct netconn *conn, const char *request) {
     }
 
     int plant_id;
-    int parseResult = sscanf(request + strlen(endpoint), "?plant_id=%d", &plant_id);
-    if (parseResult != 1) {
-        const char message[] = "Parameter `plant_id` is required";
+    const size_t token_size = 1000;
+    char *token = malloc(token_size + 1);
+    int parseResult = parseRequest(request + strlen(endpoint), &plant_id, token, token_size);
+    ESP_LOGI(TAG, "scanned: %d, plant_id: %d, token: %s", parseResult, plant_id, token);
+    if (parseResult != 2) {
+        const char message[] = "Parameters `plant_id` and `token` are required";
         response(conn, 400, message);
         return;
     }
@@ -93,10 +109,10 @@ void handle_request(struct netconn *conn, const char *request) {
 
     // Temporary success response
     //
-    const char *format = "Got plant ID: %d";
-    size_t length = snprintf(NULL, 0, format, plant_id);
-    char message[length];
-    snprintf(message, length + 1, format, plant_id);
+    const char *format = "Got plant ID: %d and token: %.10s...";
+    size_t length = snprintf(NULL, 0, format, plant_id, token);
+    char message[length + 1];
+    snprintf(message, length, format, plant_id, token);
 
     response(conn, 200, message);
 
@@ -157,15 +173,15 @@ static void http_server_task(void *pvParameters) {
 
 
 void initialize_web_server(EventGroupHandle_t _event_group) {
-    /* xTaskCreate(&http_server_task, "http_server_task", 2048, NULL, 5, NULL); */
     event_group = _event_group;
-    ESP_LOGI(TAG, ">>>> Start Request");
-    RequestParams params = {
-        .host = WEB_SERVER,
-        .url = WEB_URL,
-        .token = TOKEN,
-        .body = "{\"name\":\"esp-32\", \"plant_type\": 7}",
-    };
-    http_request(event_group, &params);
-    ESP_LOGI(TAG, "<<<< Finish Request");
+    xTaskCreate(&http_server_task, "http_server_task", 1024 * 4, NULL, 5, NULL);
+    /* ESP_LOGI(TAG, ">>>> Start Request"); */
+    /* RequestParams params = { */
+    /*     .host = WEB_SERVER, */
+    /*     .url = WEB_URL, */
+    /*     .token = TOKEN, */
+    /*     .body = "{\"name\":\"esp-32\", \"plant_type\": 7}", */
+    /* }; */
+    /* http_request(event_group, &params); */
+    /* ESP_LOGI(TAG, "<<<< Finish Request"); */
 }
