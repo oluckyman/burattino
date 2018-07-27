@@ -4,8 +4,7 @@
 static const int HTTP_REQUEST_DONE_BIT = BIT2;
 
 typedef struct RequestParams {
-    char url[150];
-    char host[50];
+    char url[200];
     char token[1000];
     char body[200];
 } RequestParams;
