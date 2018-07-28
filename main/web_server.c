@@ -12,6 +12,19 @@ static const char *TAG = "bur[http-server]";
 
 static EventGroupHandle_t event_group;
 
+enum parser_status {
+    PARSER_STATUS_OK,
+    PARSER_STATUS_PARSE_URL_ERROR,
+    PARSER_STATUS_NOT_FOUND,
+    PARSER_STATUS_INVALID_PARAMS,
+};
+
+typedef struct RegisterDeviceRequest {
+    char endpoint[200];
+    char token[1000];
+    enum parser_status status;
+} RegisterDeviceRequest;
+
 
 void send_header(struct netconn *conn, int http_code) {
     const char *header;
@@ -70,7 +83,6 @@ void send_body(struct netconn *conn, int http_code, const char *message) {
 
 void response(struct netconn *conn, int http_code, const char *message) {
     ESP_LOGI(TAG, "<<<<<<<<<< Response:");
-
     ESP_LOGI(TAG, "... sending header");
     send_header(conn, http_code);
     ESP_LOGI(TAG, "... header sent");
@@ -81,37 +93,16 @@ void response(struct netconn *conn, int http_code, const char *message) {
 }
 
 
-void buildRequestParams(RequestParams *params, const char *url, const char *token) {
-    strcpy(params->url, url);
-    strcpy(params->token, token);
-    char body[] = "{\"name\":\"esp-32\", \"plant_type\": 7}";
-    strcpy(params->body, body);
-}
-
-enum parser_status {
-    PARSER_STATUS_OK,
-    PARSER_STATUS_PARSE_URL_ERROR,
-    PARSER_STATUS_NOT_FOUND,
-    PARSER_STATUS_INVALID_PARAMS,
-};
-
-typedef struct RegisterDeviceRequest {
-    char endpoint[200];
-    char token[1000];
-    enum parser_status status;
-} RegisterDeviceRequest;
-
-
 int http_on_url(http_parser *parser, const char *at, size_t length) {
     struct http_parser_url url;
-    RegisterDeviceRequest *parsedRequest = parser->data;
+    RegisterDeviceRequest *parsed_request = parser->data;
 
     // Parse the request data
     //
     int r = http_parser_parse_url(at, length, 0, &url);
     if (r != 0) {
-        ESP_LOGE(TAG, "Error parsing url (%d)", r);
-        parsedRequest->status = PARSER_STATUS_PARSE_URL_ERROR;
+        ESP_LOGW(TAG, "Error parsing url (%d)", r);
+        parsed_request->status = PARSER_STATUS_PARSE_URL_ERROR;
         return 0;
     }
 
@@ -122,7 +113,7 @@ int http_on_url(http_parser *parser, const char *at, size_t length) {
             strlen(endpoint) != url.field_data[UF_PATH].len ||
             strncmp(endpoint, at + url.field_data[UF_PATH].off, url.field_data[UF_PATH].len) != 0
        ) {
-        parsedRequest->status = PARSER_STATUS_NOT_FOUND;
+        parsed_request->status = PARSER_STATUS_NOT_FOUND;
         return 0;
     }
 
@@ -134,34 +125,42 @@ int http_on_url(http_parser *parser, const char *at, size_t length) {
     // Quick and dumb params extraction
     char *format;
     asprintf(&format, "endpoint=%%%d[^&]&token=%%%ds",
-            sizeof(parsedRequest->endpoint),
-            sizeof(parsedRequest->token));
-    int parsed = sscanf(query, format, parsedRequest->endpoint, parsedRequest->token);
+            sizeof(parsed_request->endpoint),
+            sizeof(parsed_request->token));
+    int parsed = sscanf(query, format, parsed_request->endpoint, parsed_request->token);
 
     free(format);
     free(query);
 
     if (parsed != 2) {
-        parsedRequest->status = PARSER_STATUS_INVALID_PARAMS;
+        parsed_request->status = PARSER_STATUS_INVALID_PARAMS;
         return 0;
     }
 
-    parsedRequest->status = PARSER_STATUS_OK;
+    parsed_request->status = PARSER_STATUS_OK;
     return 0;
 }
 
 
-int registerDeviceOnBackend(const char *endpoint, const char *token) {
+int register_device_on_backend(const char *endpoint, const char *token) {
     ESP_LOGI(TAG, ">>>> Send Request to Backend");
 
-    RequestParams *params = calloc(1, sizeof(RequestParams));
+    RequestParams *request_params = calloc(1, sizeof(RequestParams));
+
     char *url = NULL;
     asprintf(&url, "http://%s", endpoint);
-    buildRequestParams(params, url, token);
+    strcpy(request_params->url, url);
     free(url);
 
-    http_request(event_group, params);
-    free(params);
+    strcpy(request_params->token, token);
+
+    char body[] = "{\"name\":\"esp-32\", \"plant_type\": 7}";
+    strcpy(request_params->body, body);
+
+    http_request(event_group, request_params);
+    // TODO: recieve response from the backend here
+
+    free(request_params);
 
     ESP_LOGI(TAG, "<<<< Finish Request to Backend");
     return 0;
@@ -171,11 +170,11 @@ int registerDeviceOnBackend(const char *endpoint, const char *token) {
 void handle_request(struct netconn *conn, const char *request) {
     // 1. parse request
     //
-    RegisterDeviceRequest *parsedRequest = calloc(1, sizeof(RegisterDeviceRequest));
+    RegisterDeviceRequest *parsed_request = calloc(1, sizeof(RegisterDeviceRequest));
     struct http_parser *parser = calloc(1, sizeof(struct http_parser));
     struct http_parser_settings *parser_settings = calloc(1, sizeof(struct http_parser_settings));
 
-    parser->data = parsedRequest;
+    parser->data = parsed_request;
     parser_settings->on_url = http_on_url;
 
     http_parser_init(parser, HTTP_REQUEST);
@@ -184,44 +183,29 @@ void handle_request(struct netconn *conn, const char *request) {
     free(parser);
     free(parser_settings);
 
-    // 2. analyze the structure
-    ESP_LOGW(TAG, "Parsing done %d", parsedRequest->status);
-    switch(parsedRequest->status) {
+    // 2. send response depending on request status
+    //
+    switch(parsed_request->status) {
         case PARSER_STATUS_OK:
-            registerDeviceOnBackend(parsedRequest->endpoint, parsedRequest->token);
+            // 3. send http request to the backend to register device
+            register_device_on_backend(parsed_request->endpoint, parsed_request->token);
             response(conn, 200, "Temporary OK response");
             break;
         case PARSER_STATUS_NOT_FOUND:
             response(conn, 404, "");
             break;
         case PARSER_STATUS_INVALID_PARAMS:
-            response(conn, 400,  "Parameters `endpoint` and `token` are required");
+            response(conn, 400, "Parameters `endpoint` and `token` are required");
             break;
         case PARSER_STATUS_PARSE_URL_ERROR:
-            response(conn, 400,  "Error parsing request");
+            response(conn, 400, "Error parsing request");
             break;
         default:
-            response(conn, 500,  "Unknown parse status code");
+            response(conn, 500, "Unknown parse status code");
             break;
     }
-    // 3. make request to the backend
-    // 3. send responses based on the request
-    free(parsedRequest);
-
-
-
-    /* // Temporary success response */
-    /* // */
-    /* const char *format = "Got plant ID: %d and token: %.10s..."; */
-    /* size_t message_size = snprintf(NULL, 0, format, plant_id, token); */
-    /* char message[message_size + 1]; */
-    /* snprintf(message, message_size, format, plant_id, token); */
-
-    /* response(conn, 200, message); */
-    /* free(token); */
-
-    ESP_LOGI(TAG, "OK");
-}
+    free(parsed_request);
+} // handle_request
 
 
 static void http_server_netconn_serve(struct netconn *conn) {

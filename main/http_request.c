@@ -17,29 +17,27 @@ static const char *TAG = "bur[http-request]";
 esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
-            ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
+            ESP_LOGV(TAG, "HTTP_EVENT_ERROR");
             break;
         case HTTP_EVENT_ON_CONNECTED:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+            ESP_LOGV(TAG, "HTTP_EVENT_ON_CONNECTED");
             break;
         case HTTP_EVENT_HEADER_SENT:
-            ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
+            ESP_LOGV(TAG, "HTTP_EVENT_HEADER_SENT");
             break;
         case HTTP_EVENT_ON_HEADER:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            ESP_LOGV(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
             break;
         case HTTP_EVENT_ON_DATA:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                // Write out data
-                printf("%.*s\n", evt->data_len, (char*)evt->data);
+                ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA:\n%.*s\n", evt->data_len, (char *)evt->data);
             }
             break;
         case HTTP_EVENT_ON_FINISH:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+            ESP_LOGV(TAG, "HTTP_EVENT_ON_FINISH");
             break;
         case HTTP_EVENT_DISCONNECTED:
-            ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+            ESP_LOGV(TAG, "HTTP_EVENT_DISCONNECTED");
             break;
         default:
             ESP_LOGW(TAG, "Unknown event id: %d", evt->event_id);
@@ -78,6 +76,7 @@ void http_request_task(void *pvParameters) {
 
     esp_http_client_cleanup(client);
     free(header_buf);
+    xEventGroupSetBits(event_group, HTTP_REQUEST_DONE_BIT);
     vTaskDelete(NULL);
 }
 
@@ -88,4 +87,5 @@ void http_request(EventGroupHandle_t _event_group, RequestParams *params) {
     xEventGroupClearBits(event_group, HTTP_REQUEST_DONE_BIT);
     xTaskCreate(&http_request_task, "http_request_task", 4096, params, 5, NULL);
     xEventGroupWaitBits(event_group, HTTP_REQUEST_DONE_BIT, true, false, portMAX_DELAY);
+    // TODO: return response from the backend here
 }
