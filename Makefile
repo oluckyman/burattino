@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := burattino
+PROJECT_NAME := burattino-esp
 
 include $(IDF_PATH)/make/project.mk
 
