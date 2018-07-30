@@ -9,6 +9,7 @@ typedef struct RequestParams {
     char body[200];
 } RequestParams;
 
-void http_request(EventGroupHandle_t _event_group, RequestParams *params);
+
+int http_request(EventGroupHandle_t _event_group, RequestParams *params);
 
 #endif

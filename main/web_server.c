@@ -157,13 +157,12 @@ int register_device_on_backend(const char *endpoint, const char *token) {
     char body[] = "{\"name\":\"esp-32\", \"plant_type\": 7}";
     strcpy(request_params->body, body);
 
-    http_request(event_group, request_params);
-    // TODO: recieve response from the backend here
+    int status_code = http_request(event_group, request_params);
 
     free(request_params);
 
     ESP_LOGI(TAG, "<<<< Finish Request to Backend");
-    return 0;
+    return status_code;
 }
 
 
@@ -185,11 +184,16 @@ void handle_request(struct netconn *conn, const char *request) {
 
     // 2. send response depending on request status
     //
+    int status_code;
     switch(parsed_request->status) {
         case PARSER_STATUS_OK:
             // 3. send http request to the backend to register device
-            register_device_on_backend(parsed_request->endpoint, parsed_request->token);
-            response(conn, 200, "Temporary OK response");
+            status_code = register_device_on_backend(parsed_request->endpoint, parsed_request->token);
+            if (status_code == 200) {
+                response(conn, 200, "");
+            } else {
+                response(conn, 500, "Error registering device on backend");
+            }
             break;
         case PARSER_STATUS_NOT_FOUND:
             response(conn, 404, "");

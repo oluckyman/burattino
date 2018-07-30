@@ -47,6 +47,13 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
 }
 
 
+struct BackendResponse {
+    int status_code;
+    char message[100];
+};
+
+struct BackendResponse backend_response;
+
 void http_request_task(void *pvParameters) {
     RequestParams *params = (RequestParams *)pvParameters;
     esp_http_client_config_t config = {
@@ -70,8 +77,10 @@ void http_request_task(void *pvParameters) {
         ESP_LOGI(TAG, "HTTP PUT Status = %d, content_length = %d",
                 esp_http_client_get_status_code(client),
                 esp_http_client_get_content_length(client));
+        backend_response.status_code = esp_http_client_get_status_code(client);
     } else {
         ESP_LOGE(TAG, "HTTP PUT request failed: %s", esp_err_to_name(err));
+        backend_response.status_code = 500;
     }
 
     esp_http_client_cleanup(client);
@@ -81,11 +90,13 @@ void http_request_task(void *pvParameters) {
 }
 
 
-void http_request(EventGroupHandle_t _event_group, RequestParams *params) {
+int http_request(EventGroupHandle_t _event_group, RequestParams *params) {
     event_group = _event_group;
 
     xEventGroupClearBits(event_group, HTTP_REQUEST_DONE_BIT);
     xTaskCreate(&http_request_task, "http_request_task", 4096, params, 5, NULL);
     xEventGroupWaitBits(event_group, HTTP_REQUEST_DONE_BIT, true, false, portMAX_DELAY);
-    // TODO: return response from the backend here
+    // TODO: refactor it to return more information about the result
+    // implement Response struct containing status code and message
+    return backend_response.status_code;
 }
