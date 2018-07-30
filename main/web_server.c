@@ -142,7 +142,20 @@ int http_on_url(http_parser *parser, const char *at, size_t length) {
 }
 
 
-int register_device_on_backend(const char *endpoint, const char *token) {
+esp_err_t get_device_id(char *device_id) {
+    uint8_t mac_addr[6] = {0};
+    esp_err_t ret = esp_efuse_mac_get_default(mac_addr);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Get base MAC address from BLK0 of EFUSE error (%s)", esp_err_to_name(ret));
+        return ret;
+    }
+	sprintf(device_id, "%02X:%02X:%02X:%02X:%02X:%02X",
+            mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+    return ESP_OK;
+}
+
+
+int register_device_on_backend(const char *endpoint, const char *token, const char *device_id) {
     ESP_LOGI(TAG, ">>>> Send Request to Backend");
 
     RequestParams *request_params = calloc(1, sizeof(RequestParams));
@@ -154,8 +167,8 @@ int register_device_on_backend(const char *endpoint, const char *token) {
 
     strcpy(request_params->token, token);
 
-    char body[] = "{\"name\":\"esp-32\", \"plant_type\": 7}";
-    strcpy(request_params->body, body);
+    snprintf(request_params->body, sizeof(request_params->body),
+            "{\"name\":\"esp-32\", \"plant_type\": 7, \"device\": \"%s\"}", device_id);
 
     int status_code = http_request(event_group, request_params);
 
@@ -185,14 +198,19 @@ void handle_request(struct netconn *conn, const char *request) {
     // 2. send response depending on request status
     //
     int status_code;
+    char device_id[(2 + 1) * 6];
     switch(parsed_request->status) {
         case PARSER_STATUS_OK:
             // 3. send http request to the backend to register device
-            status_code = register_device_on_backend(parsed_request->endpoint, parsed_request->token);
-            if (status_code == 200) {
-                response(conn, 200, "");
+            if (get_device_id(device_id) != ESP_OK) {
+                response(conn, 500, "Cannot obtain device id");
             } else {
-                response(conn, 500, "Error registering device on backend");
+                status_code = register_device_on_backend(parsed_request->endpoint, parsed_request->token, device_id);
+                if (status_code == 200) {
+                    response(conn, 200, "");
+                } else {
+                    response(conn, 500, "Cannot register device on backend");
+                }
             }
             break;
         case PARSER_STATUS_NOT_FOUND:

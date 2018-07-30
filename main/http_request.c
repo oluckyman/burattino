@@ -30,7 +30,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
             break;
         case HTTP_EVENT_ON_DATA:
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA:\n%.*s\n", evt->data_len, (char *)evt->data);
+                ESP_LOGI(TAG, "HTTP_EVENT_ON_DATA:\n%.*s\n", evt->data_len, (char *)evt->data);
             }
             break;
         case HTTP_EVENT_ON_FINISH:
