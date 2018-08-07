@@ -168,7 +168,7 @@ int register_device_on_backend(const char *endpoint, const char *token, const ch
     strcpy(request_params->token, token);
 
     snprintf(request_params->body, sizeof(request_params->body),
-            "{\"name\":\"esp-32\", \"plant_type\": 7, \"device\": \"%s\"}", device_id);
+            "{\"device\": \"%s\"}", device_id);
 
     int status_code = http_request(event_group, request_params);
 
