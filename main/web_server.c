@@ -207,7 +207,7 @@ void handle_request(struct netconn *conn, const char *request) {
             } else {
                 status_code = register_device_on_backend(parsed_request->endpoint, parsed_request->token, device_id);
                 if (status_code == 200) {
-                    response(conn, 200, "");
+                    response(conn, 200, device_id);
                 } else {
                     response(conn, 500, "Cannot register device on backend");
                 }
