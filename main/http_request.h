@@ -4,11 +4,10 @@
 static const int HTTP_REQUEST_DONE_BIT = BIT2;
 
 typedef struct RequestParams {
-    char url[200];
-    char token[1000];
-    char body[200];
+    char *url;
+    char *token;
+    char *body;
 } RequestParams;
-
 
 int http_request(EventGroupHandle_t _event_group, RequestParams *params);
 

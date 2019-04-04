@@ -161,18 +161,15 @@ int register_device_on_backend(const char *endpoint, const char *token, const ch
 
     RequestParams *request_params = calloc(1, sizeof(RequestParams));
 
-    char *url = NULL;
-    asprintf(&url, "http://%s", endpoint);
-    strcpy(request_params->url, url);
-    free(url);
-
-    strcpy(request_params->token, token);
-
-    snprintf(request_params->body, sizeof(request_params->body),
-            "{\"device\": \"%s\"}", device_id);
+    asprintf(&request_params->url, "http://%s", endpoint);
+    asprintf(&request_params->token, token);
+    asprintf(&request_params->body, "{\"device\": \"%s\"}", device_id);
 
     int status_code = http_request(event_group, request_params);
 
+    free(request_params->url);
+    free(request_params->token);
+    free(request_params->body);
     free(request_params);
 
     ESP_LOGI(TAG, "<<<< Finish Request to Backend");
